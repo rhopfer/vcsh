@@ -2,8 +2,13 @@
 
 # run git command
 #   based on bash_completion:_command_offset()
+# Args:
+#   $1    word offset
+#   $2..  optional string that should prepend to remaining line
 _vcsh_git_command () {
 	local word_offset=$1
+	shift
+	local subcmd="$@"
 	for (( i=0; i < $word_offset; i++ )); do
 		for (( j=0; j <= ${#COMP_LINE}; j++ )); do
 			[[ "$COMP_LINE" == "${COMP_WORDS[i]}"* ]] && break
@@ -13,18 +18,27 @@ _vcsh_git_command () {
 		COMP_LINE=${COMP_LINE#"${COMP_WORDS[i]}"}
 		((COMP_POINT-=${#COMP_WORDS[i]}))
 	done
-	COMP_LINE="git $COMP_LINE"
-	((COMP_POINT+=4))
+	if [[ -z $subcmd ]]; then
+		COMP_LINE="git $COMP_LINE"
+		((COMP_POINT += 4))
+	else
+		COMP_LINE="git $subcmd $COMP_LINE"
+		((COMP_POINT += 5 + ${#subcmd}))
+	fi
 
 	# shift COMP_WORDS elements and adjust COMP_CWORD
-	for (( i=1; i <= COMP_CWORD - $word_offset + 1; i++ )); do
-		COMP_WORDS[i]=${COMP_WORDS[i+$word_offset-1]}
+	local -a add_words=( git )
+	if [[ -n $subcmd ]]; then
+		add_words=("${add_words[@]}" $*)
+	fi
+	for (( i=0; i <= COMP_CWORD - $word_offset; i++ )); do
+		COMP_WORDS[i]=${COMP_WORDS[i+$word_offset]}
 	done
 	for (( i; i <= COMP_CWORD; i++ )); do
 		unset 'COMP_WORDS[i]'
 	done
-	COMP_WORDS[0]=git
-	((COMP_CWORD -= $word_offset - 1))
+	COMP_WORDS=("${add_words[@]}" "${COMP_WORDS[@]}")
+	((COMP_CWORD -= $word_offset - ${#add_words[@]}))
 
 	local cspec=$( complete -p git 2>/dev/null )
 	if [[ -n $cspec ]]; then
@@ -57,7 +71,7 @@ _vcsh () {
 
 	local repos cmds
 	repos=( $(command vcsh list) )
-	cmds="clone delete enter foreach help init list list-tracked list-untracked
+	cmds="clone commit delete enter foreach help init list list-tracked list-untracked
 		  pull push rename run status upgrade version which write-gitignore"
 
 	local subcword cmd subcmd
@@ -108,6 +122,12 @@ _vcsh () {
 				COMPREPLY=( $(compgen -W "${repos[*]}" -- $cur) )
 				return
 			fi
+			return
+			;;
+
+		commit)
+			# TODO: use GIT_DIR
+			_vcsh_git_command $subcword commit
 			return
 			;;
 
